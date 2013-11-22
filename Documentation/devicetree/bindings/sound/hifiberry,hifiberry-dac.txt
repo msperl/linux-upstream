@@ -1,0 +1,12 @@
+* Hifiberry-dac soundcard-hat for raspberry-pi
+
+Required properties:
+- compatible: "hifiberry,hifiberry-dac"
+- i2s-controller: phandle of the bcm2835 i2s controller
+
+Example:
+
+sound {
+      compatible = "hifiberry,hifiberry-dac";
+      i2s-controller = <&i2s>;
+};
