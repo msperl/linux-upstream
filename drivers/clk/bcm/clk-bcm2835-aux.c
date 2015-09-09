@@ -27,6 +27,7 @@ static int bcm2835_aux_clk_probe(struct platform_device *pdev)
 	struct clk_onecell_data *onecell;
 	const char *parent;
 	void __iomem *reg;
+	spinlock_t *lock;
 
 	parent = of_clk_get_parent_name(dev->of_node, 0);
 	if (!parent) {
@@ -38,31 +39,39 @@ static int bcm2835_aux_clk_probe(struct platform_device *pdev)
 	if (!reg)
 		return -ENODEV;
 
-	onecell = kmalloc(sizeof(*onecell), GFP_KERNEL);
+	lock = devm_kmalloc(dev, sizeof(*lock), GFP_KERNEL);
+	if (!lock)
+		return -ENOMEM;
+	spin_lock_init(lock);
+
+	onecell = devm_kmalloc(dev, sizeof(*onecell), GFP_KERNEL);
 	if (!onecell)
 		return -ENOMEM;
 	onecell->clk_num = BCM2835_AUX_CLOCK_COUNT;
-	onecell->clks = kzalloc(sizeof(*onecell->clks), GFP_KERNEL);
+	onecell->clks = devm_kzalloc(dev,
+				     sizeof(*onecell->clks) *
+				     BCM2835_AUX_CLOCK_COUNT,
+				     GFP_KERNEL);
 	if (!onecell->clks)
 		return -ENOMEM;
 
 	onecell->clks[BCM2835_AUX_CLOCK_UART] =
 		clk_register_gate(dev, "aux_uart", parent,
 				  CLK_IGNORE_UNUSED | CLK_SET_RATE_GATE,
-				  reg, BIT(0),
-				  0, NULL);
+				  reg, 0,
+				  0, lock);
 
 	onecell->clks[BCM2835_AUX_CLOCK_SPI1] =
 		clk_register_gate(dev, "aux_spi1", parent,
 				  CLK_IGNORE_UNUSED | CLK_SET_RATE_GATE,
-				  reg, BIT(1),
-				  0, NULL);
+				  reg, 1,
+				  0, lock);
 
 	onecell->clks[BCM2835_AUX_CLOCK_SPI2] =
 		clk_register_gate(dev, "aux_spi2", parent,
 				  CLK_IGNORE_UNUSED | CLK_SET_RATE_GATE,
-				  reg, BIT(2),
-				  0, NULL);
+				  reg, 2,
+				  0, lock);
 
 	return of_clk_add_provider(pdev->dev.of_node, of_clk_src_onecell_get,
 				   onecell);
