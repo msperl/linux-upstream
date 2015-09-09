@@ -1,0 +1,31 @@
+Broadcom BCM2835 auxiliary peripheral clocks
+
+This binding uses the common clock binding:
+    Documentation/devicetree/bindings/clock/clock-bindings.txt
+
+This controls the clock gating for the BCM2835 auxiliary peripherals
+(UART, SPI1, and SPI2).
+
+Required properties:
+- compatible:	Should be "brcm,bcm2835-aux-clock"
+- #clock-cells:	Should be <1>. The permitted clock-specifier values can be
+		  found in include/dt-bindings/clock/bcm2835-aux.h
+- reg:		Specifies base physical address and size of the gate register
+- clocks:	The parent clock phandle
+
+Example:
+
+	clocks: cprman@7e101000 {
+		compatible = "brcm,bcm2835-cprman";
+		#clock-cells = <1>;
+		reg = <0x7e101000 0x2000>;
+		clocks = <&clk_osc>;
+	};
+
+	aux_clocks: aux-clocks@0x7e215004 {
+		compatible = "brcm,bcm2835-aux-clock";
+		#clock-cells = <1>;
+		reg = 0x7e215004 0x4>;
+		clocks = <&clk_osc>;
+		clocks = <&clocks BCM2835_CLOCK_VPU>;
+	};
