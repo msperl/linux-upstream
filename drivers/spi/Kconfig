@@ -89,16 +89,15 @@ config SPI_BCM2835
 	  not supported.
 
 config SPI_BCM2835AUX
-	tristate "BCM2835 SPI auxiliar controller"
+	tristate "BCM2835 SPI auxiliary controller"
 	depends on ARCH_BCM2835 || COMPILE_TEST
 	depends on GPIOLIB
-	select SOC_BCM2835_AUX
 	help
 	  This selects a driver for the Broadcom BCM2835 SPI aux master.
 
 	  The BCM2835 contains two types of SPI master controller; the
 	  "universal SPI master", and the regular SPI controller.
-	  This driver is for the universal/auxiliar SPI controller.
+	  This driver is for the universal/auxiliary SPI controller.
 
 config SPI_BFIN5XX
 	tristate "SPI controller driver for ADI Blackfin5xx"

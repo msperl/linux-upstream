@@ -1,5 +1,5 @@
 /*
- * Driver for Broadcom BCM2835 SPI Controllers
+ * Driver for Broadcom BCM2835 auxiliary SPI Controllers
  *
  * the driver does not rely on the native chipselects at all
  * but only uses the gpio type chipselects
@@ -26,7 +26,6 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
-#include <linux/soc/bcm/bcm2835-aux.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
@@ -38,27 +37,10 @@
 #include <linux/spinlock.h>
 
 /*
- * shared aux registers between spi1/spi2 and uart1
- *
- * these defines could go to a separate module if needed
- * so that it can also get used with the uart1 implementation
- * when it materializes.
- */
-
-/* the AUX register offsets */
-#define BCM2835_AUX_IRQ		0x00
-#define BCM2835_AUX_ENABLE	0x04
-
-/* the AUX Bitfield identical for both register */
-#define BCM2835_AUX_BIT_UART	0x00000001
-#define BCM2835_AUX_BIT_SPI1	0x00000002
-#define BCM2835_AUX_BIT_SPI2	0x00000004
-
-/*
  * spi register defines
  *
  * note there is garbage in the "official" documentation,
- * so somedata taken from the file:
+ * so some data is taken from the file:
  *   brcm_usrlib/dag/vmcsx/vcinclude/bcm2708_chip/aux_io.h
  * inside of:
  *   http://www.broadcom.com/docs/support/videocore/Brcm_Android_ICS_Graphics_Stack.tar.gz
@@ -112,9 +94,6 @@
 
 #define BCM2835_AUX_SPI_MODE_BITS (SPI_CPOL | SPI_CPHA | SPI_CS_HIGH \
 				  | SPI_NO_CS)
-
-#define DRV_NAME	"spi-bcm2835aux"
-#define ENABLE_PROPERTY "brcm,aux-enable"
 
 struct bcm2835aux_spi {
 	void __iomem *regs;
@@ -354,6 +333,7 @@ static int bcm2835aux_spi_transfer_one(struct spi_master *master,
 		speed = BCM2835_AUX_SPI_CNTL0_SPEED_MAX;
 	}
 	bs->cntl[0] |= speed << BCM2835_AUX_SPI_CNTL0_SPEED_SHIFT;
+
 	spi_used_hz = clk_hz / (2 * (speed + 1));
 
 	/* handle all the modes */
@@ -396,6 +376,7 @@ static int bcm2835aux_spi_probe(struct platform_device *pdev)
 	struct spi_master *master;
 	struct bcm2835aux_spi *bs;
 	struct resource *res;
+	unsigned long clk_hz;
 	int err;
 
 	master = spi_alloc_master(&pdev->dev, sizeof(*bs));
@@ -423,11 +404,12 @@ static int bcm2835aux_spi_probe(struct platform_device *pdev)
 	}
 
 	bs->clk = devm_clk_get(&pdev->dev, NULL);
-	if (IS_ERR(bs->clk)) {
+	if ((!bs->clk) || (IS_ERR(bs->clk))) {
 		err = PTR_ERR(bs->clk);
 		dev_err(&pdev->dev, "could not get clk: %d\n", err);
 		goto out_master_put;
 	}
+
 	bs->irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
 	if (bs->irq <= 0) {
 		dev_err(&pdev->dev, "could not get IRQ: %d\n", bs->irq);
@@ -435,10 +417,19 @@ static int bcm2835aux_spi_probe(struct platform_device *pdev)
 		goto out_master_put;
 	}
 
+	/* this also enables the HW block */
 	err = clk_prepare_enable(bs->clk);
 	if (err) {
 		dev_err(&pdev->dev, "could not prepare clock: %d\n", err);
 		goto out_master_put;
+	}
+
+	/* just checking if the clock returns a sane value */
+	clk_hz = clk_get_rate(bs->clk);
+	if (!clk_hz) {
+		dev_err(&pdev->dev, "clock returns 0 Hz\n");
+		err = -ENODEV;
+		goto out_clk_disable;
 	}
 
 	err = devm_request_irq(&pdev->dev, bs->irq,
@@ -450,26 +441,17 @@ static int bcm2835aux_spi_probe(struct platform_device *pdev)
 		goto out_clk_disable;
 	}
 
-	/* enable HW block */
-	err = bcm2835aux_enable(&pdev->dev, ENABLE_PROPERTY);
-	if (err) {
-		dev_err(&pdev->dev, "could not enable aux: %d\n", err);
-		goto out_clk_disable;
-	}
-
 	/* reset SPI-HW block */
 	bcm2835aux_spi_reset_hw(bs);
 
 	err = devm_spi_register_master(&pdev->dev, master);
 	if (err) {
 		dev_err(&pdev->dev, "could not register SPI master: %d\n", err);
-		goto out_hw_disable;
+		goto out_clk_disable;
 	}
 
 	return 0;
 
-out_hw_disable:
-	bcm2835aux_disable(&pdev->dev, ENABLE_PROPERTY);
 out_clk_disable:
 	clk_disable_unprepare(bs->clk);
 out_master_put:
@@ -482,13 +464,10 @@ static int bcm2835aux_spi_remove(struct platform_device *pdev)
 	struct spi_master *master = platform_get_drvdata(pdev);
 	struct bcm2835aux_spi *bs = spi_master_get_devdata(master);
 
-	/* Clear FIFOs, and disable the HW block */
-	clk_disable_unprepare(bs->clk);
-
 	bcm2835aux_spi_reset_hw(bs);
 
-	/* disable HW block */
-	bcm2835aux_disable(&pdev->dev, ENABLE_PROPERTY);
+	/* disable the HW block by releasing the clock */
+	clk_disable_unprepare(bs->clk);
 
 	return 0;
 }
@@ -501,7 +480,7 @@ MODULE_DEVICE_TABLE(of, bcm2835aux_spi_match);
 
 static struct platform_driver bcm2835aux_spi_driver = {
 	.driver		= {
-		.name		= DRV_NAME,
+		.name		= "spi-bcm2835aux",
 		.of_match_table	= bcm2835aux_spi_match,
 	},
 	.probe		= bcm2835aux_spi_probe,
