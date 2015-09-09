@@ -73,6 +73,13 @@
 			clocks = <&clk_osc>;
 		};
 
+		aux_clocks: aux-clocks@0x7e215004 {
+			compatible = "brcm,bcm2835-aux-clock";
+			#clock-cells = <1>;
+			reg = <0x7e215004 0x4>;
+			clocks = <&clocks BCM2835_CLOCK_VPU>;
+		};
+
 		rng@7e104000 {
 			compatible = "brcm,bcm2835-rng";
 			reg = <0x7e104000 0x10>;
