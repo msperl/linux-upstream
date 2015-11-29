@@ -53,6 +53,11 @@ extern struct bus_type spi_bus_type;
  *
  * @transfer_bytes_histo:
  *                 transfer bytes histogramm
+ *
+ * @transfers_split_maxsize:
+ *                 number of transfers split because of len exceeds maxsize
+ * @transfers_split_unaligned:
+ *                 number of transfers split because of unaligned transfers
  */
 struct spi_statistics {
 	spinlock_t		lock; /* lock for the whole structure */
@@ -72,6 +77,10 @@ struct spi_statistics {
 
 #define SPI_STATISTICS_HISTO_SIZE 17
 	unsigned long transfer_bytes_histo[SPI_STATISTICS_HISTO_SIZE];
+
+	unsigned long           transfers_split_maxsize;
+	unsigned long           transfers_split_unaligned;
+
 };
 
 void spi_statistics_add_transfer_stats(struct spi_statistics *stats,
@@ -606,6 +615,24 @@ extern void spi_res_free(void *res);
 
 extern void spi_res_release(struct spi_master *master,
 			    struct spi_message *message);
+
+/* SPI transfer modifications using spi_res */
+
+extern struct spi_transfer *spi_replace_transfers(
+	struct spi_message *msg,
+	struct spi_transfer *xfer,
+	int remove, int insert,
+	spi_res_release_t release);
+
+extern int spi_split_transfers_first_page_len_not_aligned(
+	struct spi_master *master,
+	struct spi_message *message,
+	bool when_can_dma,
+	size_t alignment);
+
+extern int spi_split_transfers_maxsize(struct spi_master *master,
+				       struct spi_message *msg,
+				       size_t maxsize);
 
 /*---------------------------------------------------------------------------*/
 
