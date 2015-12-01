@@ -570,6 +570,11 @@ static int bcm2835_spi_prepare_message(struct spi_master *master,
 
 	/* apply some spi_transfer transformations */
 
+	/* merge spi transfers together up to 2048 bytes in size */
+	ret = spi_merge_transfers(master, msg, 2048);
+	if (ret)
+		return ret;
+
 	/* align transfers on words length - avoiding
 	 * that the scatter/gather list produces transfers
 	 * that are not a multiple of 4
@@ -584,6 +589,11 @@ static int bcm2835_spi_prepare_message(struct spi_master *master,
 	 * another set of alignment issues we limit ourselves
 	 */
 	ret = spi_split_transfers_maxsize(master, msg, 8 * PAGE_SIZE);
+	if (ret)
+		return ret;
+
+	/* merge spi transfers together up to 2048 bytes in size */
+	ret = spi_merge_transfers(master, msg, 2048);
 	if (ret)
 		return ret;
 

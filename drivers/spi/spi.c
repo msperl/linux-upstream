@@ -147,6 +147,7 @@ SPI_STATISTICS_TRANSFER_BYTES_HISTO(16, "65536+");
 
 SPI_STATISTICS_SHOW(transfers_split_maxsize, "%lu");
 SPI_STATISTICS_SHOW(transfers_split_unaligned, "%lu");
+SPI_STATISTICS_SHOW(transfers_merged, "%lu");
 
 static struct attribute *spi_dev_attrs[] = {
 	&dev_attr_modalias.attr,
@@ -187,6 +188,7 @@ static struct attribute *spi_device_statistics_attrs[] = {
 	&dev_attr_spi_device_transfer_bytes_histo16.attr,
 	&dev_attr_spi_device_transfers_split_maxsize.attr,
 	&dev_attr_spi_device_transfers_split_unaligned.attr,
+	&dev_attr_spi_device_transfers_merged.attr,
 	NULL,
 };
 
@@ -231,6 +233,7 @@ static struct attribute *spi_master_statistics_attrs[] = {
 	&dev_attr_spi_master_transfer_bytes_histo16.attr,
 	&dev_attr_spi_master_transfers_split_maxsize.attr,
 	&dev_attr_spi_master_transfers_split_unaligned.attr,
+	&dev_attr_spi_master_transfers_merged.attr,
 	NULL,
 };
 
@@ -2148,18 +2151,22 @@ static void __spi_replace_transfers_release(struct spi_master *master,
  * @xfer: the spi_transfer we want to replace
  * @remove: number of transfers to remove
  * @insert: the number of transfers we want to insert
+ * @extra:  extra bytes to allocate after list of transfers
  * @release: extra release code necessary in some circumstances
  *
  * Returns: pointer to array of newly inserted transfers,
  *          NULL in case of errors
+ *          the extra data starts at:
+ *             ptr + insert * sizeof(struct spi_transfer)
  */
 struct spi_transfer *spi_replace_transfers(struct spi_message *msg,
 					   struct spi_transfer *xfer,
 					   int remove, int insert,
+					   size_t extra,
 					   spi_res_release_t release)
 {
 	int i;
-	size_t size = insert * sizeof(struct spi_transfer)
+	size_t size = extra + insert * sizeof(struct spi_transfer)
 		      + sizeof(struct spi_res_replaced_transfers);
 	struct spi_res_replaced_transfers *srt;
 	struct spi_transfer *next;
@@ -2289,7 +2296,7 @@ static int __spi_split_transfers_first_page_len_not_aligned(
 		      "unaligned spi_transfers produced by spi_device driver - please fix driver\n");
 
 	/* create replacement */
-	xfers = spi_replace_transfers(message, xfer, 1, count, NULL);
+	xfers = spi_replace_transfers(message, xfer, 1, count, 0, NULL);
 	if (!xfers)
 		return -ENOMEM;
 
@@ -2405,7 +2412,7 @@ int __spi_split_transfer_maxsize(struct spi_master *master,
 	struct spi_transfer *xfers;
 
 	/* create replacement */
-	xfers = spi_replace_transfers(msg, xfer, 1, count, NULL);
+	xfers = spi_replace_transfers(msg, xfer, 1, count, 0, NULL);
 	if (!xfers)
 		return -ENOMEM;
 
@@ -2495,6 +2502,197 @@ int spi_split_transfers_maxsize(struct spi_master *master,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(spi_split_transfers_maxsize);
+
+static void __spi_merge_transfers_release(struct spi_master *master,
+					    struct spi_message *msg,
+					    void *res)
+{
+	struct spi_res_replaced_transfers *srt = res;
+	struct spi_transfer *xfers = srt->xfers;
+	struct spi_transfer *xfer;
+	u8 *ptr = xfers[0].rx_buf;
+
+	/* copy the data to the final locations */
+	list_for_each_entry(xfer, &srt->replaced_transfers, transfer_list) {
+		/* fill data only if rx_buf is set */
+		if (xfer->rx_buf)
+			memcpy(xfer->rx_buf, ptr, xfer->len);
+		ptr += xfer->len;
+	}
+}
+
+static int __spi_merge_transfers_do(struct spi_master *master,
+				    struct spi_message *msg,
+				    struct spi_transfer *xfer_start,
+				    int count,
+				    size_t size)
+{
+	size_t align = master->dma_alignment ? : sizeof(int);
+	size_t align_overhead = (size_t) PTR_ALIGN((void *)1, align);
+	size_t size_to_alloc = 2 * (size + align_overhead);
+	struct spi_transfer *xfers, *xfer;
+	struct spi_res_replaced_transfers *srt;
+	u8 *ptr;
+	/* if count is < 2 then we may return */
+	if (count < 2)
+		return 0;
+
+dev_info(&msg->spi->dev, "__spi_merge_transfers_do: %pK %i %i\n", xfer_start, count, size);
+
+	/* create replacement */
+	xfers = spi_replace_transfers(msg, xfer_start, count, 1,
+				      size_to_alloc,
+				      __spi_merge_transfers_release);
+	if (!xfers)
+		return -ENOMEM;
+
+	/* get the container address well */
+	srt = container_of((void *)xfers,
+			   struct spi_res_replaced_transfers, xfers);
+
+	/* get the last xfer that we have replaced - this contains those
+	 * valid settings  that we need to copy to the new one
+	 */
+	xfer = list_last_entry(&srt->replaced_transfers,
+			       typeof(*xfer), transfer_list);
+
+	/* fill the transfer with the settings from the last replaced */
+	xfers[0].cs_change = xfer->cs_change;
+	xfers[0].delay_usecs = xfer->delay_usecs;
+
+	/* now fill in the corresponding aligned pointers */
+	ptr = PTR_ALIGN((u8 *)&xfers[1], align);
+	xfers[0].len = size;
+	xfers[0].tx_buf = ptr;
+	xfers[0].rx_buf = PTR_ALIGN(ptr + size, align);
+
+	/* finally we fill in the data for tx */
+	list_for_each_entry(xfer, &srt->replaced_transfers, transfer_list) {
+		/* fill data only if tx_buf is set */
+		if (xfer->rx_buf)
+			memcpy(ptr, xfer->tx_buf, xfer->len);
+		ptr += xfer->len;
+	}
+
+	/* increment statistics counters */
+	SPI_STATISTICS_INCREMENT_FIELD(&master->statistics,
+				       transfers_merged);
+	SPI_STATISTICS_INCREMENT_FIELD(&msg->spi->statistics,
+				       transfers_merged);
+
+dev_info(&msg->spi->dev, "__spi_merge_transfers_do: rerun\n");
+
+	/* mark it as we need to rerun... */
+	return 1;
+}
+
+static int __spi_merge_transfers(struct spi_master *master,
+				 struct spi_message *msg,
+				 struct spi_transfer *xfer_start,
+				 size_t maxsize)
+{
+	struct spi_transfer *xfer;
+	int count;
+	size_t size;
+
+	/* loop transfers till the end of the list */
+	for (count = 0, size = 0, xfer = xfer_start;
+	     !list_is_last(&xfer->transfer_list, &msg->transfers);
+	     xfer = list_next_entry(xfer, transfer_list)) {
+		/* now check on total size */
+		if (size + xfer->len > maxsize)
+			break;
+		/* these checks are only necessary on subsequent transfers */
+		if (count) {
+			/* check if we differ from the first transfer */
+			if (xfer->speed_hz != xfer_start->speed_hz)
+				break;
+			if (xfer->tx_nbits != xfer_start->tx_nbits)
+				break;
+			if (xfer->rx_nbits != xfer_start->rx_nbits)
+				break;
+			if (xfer->bits_per_word != xfer_start->bits_per_word)
+				break;
+
+			/* 3-wire we need to handle in a special way */
+			if (msg->spi->mode & SPI_3WIRE) {
+				/* did we switch directions ? */
+				if (xfer->tx_buf && xfer_start->rx_buf)
+					break;
+				if (xfer->rx_buf && xfer_start->tx_buf)
+					break;
+			}
+		}
+		/* otherwise update counters */
+		count++;
+		size += xfer->len;
+
+		/* check for conditions that would trigger a merge
+		 * based only on the current transfer
+		 * so we need count and size updated already...
+		 */
+		if (xfer->cs_change)
+			break;
+		if (xfer->delay_usecs)
+			break;
+	}
+
+	/* call merge only when we have at least 2 transfers to handle */
+	if (count > 1)
+		return __spi_merge_transfers_do(master, msg, xfer_start,
+						count, size);
+
+	return 0;
+}
+
+/**
+ * spi_merge_tranfers - merges multiple spi_transfers into a single one
+ *                      copying the corresponding data
+ * @master:    the @spi_master for this transfer
+ * @message:   the @spi_message to transform
+ * @max_size:  the maximum when to apply this
+ *
+ * Return: status of transformation
+ */
+int spi_merge_transfers(struct spi_master *master,
+			struct spi_message *msg,
+			size_t maxsize)
+{
+	struct spi_transfer *xfer;
+	int ret;
+	int loop;
+
+	/* nothing to merge if the list is empty */
+	if (list_is_singular(&msg->transfers))
+		return 0;
+
+	/* iterate over all entries keeping the last to restart
+	 * we can not use list_for_each_entry_safe_continue
+	 * as we remove multiple and the next is also removed
+	 */
+	do {
+		loop = 0;
+		list_for_each_entry(xfer, &msg->transfers, transfer_list) {
+			/* now test if it is a candidate */
+			ret = __spi_merge_transfers(master, msg,
+						xfer, maxsize);
+			dev_info(&msg->spi->dev, "spi_merge_transfers: %pK %i\n", &xfer->transfer_list,ret);
+			/* handle modification by exiting loop and
+			 * forcing another round
+			 */
+			if (ret == 1) {
+				loop = 1;
+				break;
+			}
+			/* and handle error */
+			if (ret < 0)
+				return ret;
+		}
+	} while (loop);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(spi_merge_transfers);
 
 /*-------------------------------------------------------------------------*/
 

@@ -80,7 +80,7 @@ struct spi_statistics {
 
 	unsigned long           transfers_split_maxsize;
 	unsigned long           transfers_split_unaligned;
-
+	unsigned long           transfers_merged;
 };
 
 void spi_statistics_add_transfer_stats(struct spi_statistics *stats,
@@ -622,6 +622,7 @@ extern struct spi_transfer *spi_replace_transfers(
 	struct spi_message *msg,
 	struct spi_transfer *xfer,
 	int remove, int insert,
+	size_t extra,
 	spi_res_release_t release);
 
 extern int spi_split_transfers_first_page_len_not_aligned(
@@ -633,6 +634,10 @@ extern int spi_split_transfers_first_page_len_not_aligned(
 extern int spi_split_transfers_maxsize(struct spi_master *master,
 				       struct spi_message *msg,
 				       size_t maxsize);
+
+extern int spi_merge_transfers(struct spi_master *master,
+			       struct spi_message *msg,
+			       size_t maxsize);
 
 /*---------------------------------------------------------------------------*/
 
