@@ -260,7 +260,7 @@ static struct spi_test spi_tests[] = {
 		.fill_option	= FILL_COUNT_8,
 		.iterate_len    = { ITERATE_MAX_LEN },
 		.iterate_tx_align = ITERATE_ALIGN,
-		.iterate_transfer_mask = BIT(0),
+		.iterate_transfer_mask = BIT(1),
 		.transfers		= {
 			{
 				.len = 1,
@@ -272,6 +272,37 @@ static struct spi_test spi_tests[] = {
 				/* making sure we align without overwrite */
 				.tx_buf = TX(1024),
 				.rx_buf = RX(1024),
+			},
+		},
+	},
+	{
+		.description	= "tx+rx+tx+rx transfers - alter second and fourth",
+		.fill_option	= FILL_COUNT_8,
+		.iterate_len    = { ITERATE_LEN },
+		.iterate_tx_align = ITERATE_ALIGN,
+		.iterate_transfer_mask = BIT(1)|BIT(3),
+		.transfers		= {
+			{
+				.len = 1,
+				.tx_buf = TX(0),
+			},
+			{
+				.len = 1,
+				/* making sure we align without overwrite */
+				.rx_buf = RX(0),
+				.delay_usecs = 100,
+				.cs_change = 1,
+			},
+			{
+				.len = 1,
+				/* making sure we align without overwrite */
+				.tx_buf = TX(SPI_TEST_MAX_SIZE_HALF),
+				.delay_usecs = 1,
+			},
+			{
+				.len = 1,
+				/* making sure we align without overwrite */
+				.rx_buf = RX(SPI_TEST_MAX_SIZE_HALF),
 			},
 		},
 	},

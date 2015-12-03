@@ -2019,7 +2019,7 @@ static struct spi_res *__spi_res_alloc(struct spi_device *spi,
 	 * @spi_device or @spi_master to avoid repeated allocations.
 	 */
 	sres = kzalloc(tot_size, gfp);
-	if (unlikely(!sres))
+	if (!sres)
 		return NULL;
 
 	INIT_LIST_HEAD(&sres->entry);
@@ -2113,6 +2113,7 @@ void spi_res_release(struct spi_master *master,
 	}
 }
 EXPORT_SYMBOL_GPL(spi_res_release);
+
 /*-------------------------------------------------------------------------*/
 
 /* Core methods for spi_message alterations */
@@ -2504,75 +2505,105 @@ int spi_split_transfers_maxsize(struct spi_master *master,
 EXPORT_SYMBOL_GPL(spi_split_transfers_maxsize);
 
 static void __spi_merge_transfers_release(struct spi_master *master,
-					    struct spi_message *msg,
-					    void *res)
+					  struct spi_message *msg,
+					  void *res)
 {
 	struct spi_res_replaced_transfers *srt = res;
 	struct spi_transfer *xfers = srt->xfers;
 	struct spi_transfer *xfer;
 	u8 *ptr = xfers[0].rx_buf;
+	pr_info("restore merge:\n");
 
 	/* copy the data to the final locations */
 	list_for_each_entry(xfer, &srt->replaced_transfers, transfer_list) {
 		/* fill data only if rx_buf is set */
-		if (xfer->rx_buf)
+		if (xfer->rx_buf) {
+			pr_info("restore XFER: %pK - from=%pK to=%pK len=%i\n",
+				xfer, ptr, xfer->rx_buf, xfer->len);
 			memcpy(xfer->rx_buf, ptr, xfer->len);
+		}
 		ptr += xfer->len;
 	}
 }
 
 static int __spi_merge_transfers_do(struct spi_master *master,
 				    struct spi_message *msg,
-				    struct spi_transfer *xfer_start,
+				    struct spi_transfer **xfer_start,
+				    struct spi_transfer *xfer_end,
 				    int count,
 				    size_t size)
 {
 	size_t align = master->dma_alignment ? : sizeof(int);
 	size_t align_overhead = (size_t) PTR_ALIGN((void *)1, align);
-	size_t size_to_alloc = 2 * (size + align_overhead);
-	struct spi_transfer *xfers, *xfer;
-	struct spi_res_replaced_transfers *srt;
-	u8 *ptr;
+	size_t size_to_alloc = size + align_overhead;
+	struct spi_transfer *xfer_new, *xfer;
+	u8 *data_tx;
+	int i;
+
 	/* if count is < 2 then we may return */
 	if (count < 2)
 		return 0;
 
+	/* for anything but 3-wire mode we need rx/tx_buf to be set */
+	if (!(msg->spi->mode & SPI_3WIRE)) {
+		size_to_alloc *= 2;
+
 dev_info(&msg->spi->dev, "__spi_merge_transfers_do: %pK %i %i\n", xfer_start, count, size);
 
-	/* create replacement */
-	xfers = spi_replace_transfers(msg, xfer_start, count, 1,
-				      size_to_alloc,
-				      __spi_merge_transfers_release);
-	if (!xfers)
+	/* replace count transfers starting with xfer_start
+	 * and replace them with a single transfer (which is returned)
+	 * the extra data requeste starts at:
+	 *   returned pointer + sizeof(struct_transfer)
+	 */
+	xfer_new = spi_replace_transfers(msg, *xfer_start, count, 1,
+					 size_to_alloc,
+					 __spi_merge_transfers_release);
+	if (!xfer_new)
 		return -ENOMEM;
 
-	/* get the container address well */
-	srt = container_of((void *)xfers,
-			   struct spi_res_replaced_transfers, xfers);
-
-	/* get the last xfer that we have replaced - this contains those
-	 * valid settings  that we need to copy to the new one
-	 */
-	xfer = list_last_entry(&srt->replaced_transfers,
-			       typeof(*xfer), transfer_list);
+	/* pointer to data_tx data allocated - aligned */
+	data_tx = (u8 *)xfer_new + sizeof(struct spi_transfer);
+	data_tx = PTR_ALIGN(data_tx, align);
 
 	/* fill the transfer with the settings from the last replaced */
-	xfers[0].cs_change = xfer->cs_change;
-	xfers[0].delay_usecs = xfer->delay_usecs;
+	xfer_new->cs_change = xfer_end->cs_change;
+	xfer_new->delay_usecs = xfer_end->delay_usecs;
+
+	/* set the size of the transfer */
+	xfer_new->len = size;
 
 	/* now fill in the corresponding aligned pointers */
-	ptr = PTR_ALIGN((u8 *)&xfers[1], align);
-	xfers[0].len = size;
-	xfers[0].tx_buf = ptr;
-	xfers[0].rx_buf = PTR_ALIGN(ptr + size, align);
-
-	/* finally we fill in the data for tx */
-	list_for_each_entry(xfer, &srt->replaced_transfers, transfer_list) {
-		/* fill data only if tx_buf is set */
-		if (xfer->rx_buf)
-			memcpy(ptr, xfer->tx_buf, xfer->len);
-		ptr += xfer->len;
+	if (msg->spi->mode & SPI_3WIRE) {
+		if ((*xfer_start)->tx_buf) {
+			xfer_new->tx_buf = data_tx;
+			xfer_new->rx_buf = NULL;
+		} else {
+			xfer_new->tx_buf = NULL;
+			xfer_new->rx_buf = data_tx;
+		}
+	} else {
+		xfer_new->tx_buf = data_tx;
+		xfer_new->rx_buf = PTR_ALIGN(data_tx + size, align);
 	}
+
+	/* copy the data we need for tx (if it is set) */
+	if (xfer_new->tx_buf)
+		for(xfer = *xfer_start, i = 0;
+		    i < count;
+		    i++, xfer = list_next_entry(xfer, transfer_list)) {
+			/* fill data only if tx_buf is set */
+			if (xfer->tx_buf) {
+				pr_info("fill XFER: %pK - from=%pK to=%pK len=%i\n",
+					xfer, xfer->tx_buf, data_tx, xfer->len);
+				memcpy(data_tx, xfer->tx_buf, xfer->len);
+			}
+			/* update pointer */
+			data_tx += xfer->len;
+		}
+	}
+
+	/* update the transfer to the one we have just put into the list */
+	*xfer_start = xfer_new;
 
 	/* increment statistics counters */
 	SPI_STATISTICS_INCREMENT_FIELD(&master->statistics,
@@ -2580,23 +2611,27 @@ dev_info(&msg->spi->dev, "__spi_merge_transfers_do: %pK %i %i\n", xfer_start, co
 	SPI_STATISTICS_INCREMENT_FIELD(&msg->spi->statistics,
 				       transfers_merged);
 
-dev_info(&msg->spi->dev, "__spi_merge_transfers_do: rerun\n");
-
-	/* mark it as we need to rerun... */
-	return 1;
+	return 0;
 }
 
 static int __spi_merge_transfers(struct spi_master *master,
 				 struct spi_message *msg,
-				 struct spi_transfer *xfer_start,
+				 struct spi_transfer **xfer_start,
 				 size_t maxsize)
 {
-	struct spi_transfer *xfer;
+	struct spi_transfer *xfer, *xfer_end;
 	int count;
 	size_t size;
 
-	/* loop transfers till the end of the list */
-	for (count = 0, size = 0, xfer = xfer_start;
+	/* loop transfers until we reach
+	 * * the end of the list
+	 * * a change in some essential parameters in spi_transfer
+	 *   compared to the first transfer we check
+	 *   (speed, bits, direction in 3 wire mode)
+	 * * settings that immediatly indicate we need to stop testing
+	 *   the next transfer (cs_change, delay_usecs)
+	 */
+	for (count = 0, size = 0, xfer = *xfer_start, xfer_end = xfer;
 	     !list_is_last(&xfer->transfer_list, &msg->transfers);
 	     xfer = list_next_entry(xfer, transfer_list)) {
 		/* now check on total size */
@@ -2605,27 +2640,30 @@ static int __spi_merge_transfers(struct spi_master *master,
 		/* these checks are only necessary on subsequent transfers */
 		if (count) {
 			/* check if we differ from the first transfer */
-			if (xfer->speed_hz != xfer_start->speed_hz)
+			if (xfer->speed_hz != (*xfer_start)->speed_hz)
 				break;
-			if (xfer->tx_nbits != xfer_start->tx_nbits)
+			if (xfer->tx_nbits != (*xfer_start)->tx_nbits)
 				break;
-			if (xfer->rx_nbits != xfer_start->rx_nbits)
+			if (xfer->rx_nbits != (*xfer_start)->rx_nbits)
 				break;
-			if (xfer->bits_per_word != xfer_start->bits_per_word)
+			if (xfer->bits_per_word !=(*xfer_start)->bits_per_word)
 				break;
 
 			/* 3-wire we need to handle in a special way */
 			if (msg->spi->mode & SPI_3WIRE) {
-				/* did we switch directions ? */
-				if (xfer->tx_buf && xfer_start->rx_buf)
+				/* did we switch directions in 3 wire mode ? */
+				if (xfer->tx_buf && (*xfer_start)->rx_buf)
 					break;
-				if (xfer->rx_buf && xfer_start->tx_buf)
+				if (xfer->rx_buf && (*xfer_start)->tx_buf)
 					break;
 			}
 		}
-		/* otherwise update counters */
+		/* otherwise update counters for the last few tests,
+		 * that only depend on settings of the current transfer
+		 */
 		count++;
 		size += xfer->len;
+		xfer_end = xfer;
 
 		/* check for conditions that would trigger a merge
 		 * based only on the current transfer
@@ -2638,11 +2676,12 @@ static int __spi_merge_transfers(struct spi_master *master,
 	}
 
 	/* call merge only when we have at least 2 transfers to handle */
-	if (count > 1)
-		return __spi_merge_transfers_do(master, msg, xfer_start,
-						count, size);
+	if (count < 2)
+		return 0;
 
-	return 0;
+	return __spi_merge_transfers_do(master, msg,
+					xfer_start, xfer_end,
+					count, size);
 }
 
 /**
@@ -2660,35 +2699,21 @@ int spi_merge_transfers(struct spi_master *master,
 {
 	struct spi_transfer *xfer;
 	int ret;
-	int loop;
 
 	/* nothing to merge if the list is empty */
 	if (list_is_singular(&msg->transfers))
 		return 0;
 
-	/* iterate over all entries keeping the last to restart
-	 * we can not use list_for_each_entry_safe_continue
-	 * as we remove multiple and the next is also removed
+	/* iterate over all transfers and modify xfer if we have
+	 * replaced some transfers
 	 */
-	do {
-		loop = 0;
-		list_for_each_entry(xfer, &msg->transfers, transfer_list) {
-			/* now test if it is a candidate */
-			ret = __spi_merge_transfers(master, msg,
-						xfer, maxsize);
-			dev_info(&msg->spi->dev, "spi_merge_transfers: %pK %i\n", &xfer->transfer_list,ret);
-			/* handle modification by exiting loop and
-			 * forcing another round
-			 */
-			if (ret == 1) {
-				loop = 1;
-				break;
-			}
-			/* and handle error */
-			if (ret < 0)
-				return ret;
-		}
-	} while (loop);
+	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
+		/* test if it is a merge candidate */
+		ret = __spi_merge_transfers(master, msg,
+					    &xfer, maxsize);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }
