@@ -88,6 +88,8 @@
 #define CM_HSMDIV		0x08c
 #define CM_OTPCTL		0x090
 #define CM_OTPDIV		0x094
+#define CM_PCMCTL		0x098
+#define CM_PCMDIV		0x09c
 #define CM_PWMCTL		0x0a0
 #define CM_PWMDIV		0x0a4
 #define CM_SMICTL		0x0b0
@@ -813,6 +815,16 @@ static const struct bcm2835_clock_data bcm2835_clock_pwm_data = {
 	.parents = bcm2835_clock_per_parents,
 	.ctl_reg = CM_PWMCTL,
 	.div_reg = CM_PWMDIV,
+	.int_bits = 12,
+	.frac_bits = 12,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_pcm_data = {
+	.name = "pcm",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_PCMCTL,
+	.div_reg = CM_PCMDIV,
 	.int_bits = 12,
 	.frac_bits = 12,
 };
@@ -1578,6 +1590,7 @@ static const struct bcm2835_clk_desc clk_desc_array[] = {
 	[BCM2835_CLOCK_HSM]	= REGISTER_CLK(&bcm2835_clock_hsm_data),
 	[BCM2835_CLOCK_EMMC]	= REGISTER_CLK(&bcm2835_clock_emmc_data),
 	[BCM2835_CLOCK_PWM]	= REGISTER_CLK(&bcm2835_clock_pwm_data),
+	[BCM2835_CLOCK_PCM]	= REGISTER_CLK(&bcm2835_clock_pcm_data),
 	/* the gates */
 	[BCM2835_CLOCK_PERI_IMAGE] = REGISTER_GATE(
 		&bcm2835_clock_peri_image_data),
