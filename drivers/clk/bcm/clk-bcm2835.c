@@ -92,8 +92,18 @@
 #define CM_PCMDIV		0x09c
 #define CM_PWMCTL		0x0a0
 #define CM_PWMDIV		0x0a4
+#define CM_SLIMCTL		0x0a8
+#define CM_SLIMDIV		0x0ac
 #define CM_SMICTL		0x0b0
 #define CM_SMIDIV		0x0b4
+#define CM_TCNTCTL		0x0c0
+#define CM_TCNTDIV		0x0c4
+#define CM_TECCTL		0x0c8
+#define CM_TECDIV		0x0cc
+#define CM_TD0CTL		0x0d0
+#define CM_TD0DIV		0x0d4
+#define CM_TD1CTL		0x0d8
+#define CM_TD1DIV		0x0dc
 #define CM_TSENSCTL		0x0e0
 #define CM_TSENSDIV		0x0e4
 #define CM_TIMERCTL		0x0e8
@@ -107,6 +117,9 @@
 #define CM_SDCCTL		0x1a8
 #define CM_SDCDIV		0x1ac
 #define CM_ARMCTL		0x1b0
+#define CM_ARMDIV		0x1b4
+#define CM_AVEOCTL		0x1b8
+#define CM_AVEODIV		0x1bc
 #define CM_EMMCCTL		0x1c0
 #define CM_EMMCDIV		0x1c4
 
@@ -829,6 +842,219 @@ static const struct bcm2835_clock_data bcm2835_clock_pcm_data = {
 	.frac_bits = 12,
 };
 
+static const struct bcm2835_clock_data bcm2835_clock_aveo_data = {
+	.name = "aveo",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_AVEOCTL,
+	.div_reg = CM_AVEODIV,
+	.int_bits = 4,
+	.frac_bits = 12,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_cam0_data = {
+	.name = "cam0",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_CAM0CTL,
+	.div_reg = CM_CAM0DIV,
+	.int_bits = 4,
+	.frac_bits = 8,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_cam1_data = {
+	.name = "cam1",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_CAM1CTL,
+	.div_reg = CM_CAM1DIV,
+	.int_bits = 4,
+	.frac_bits = 8,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_ccp2_data = {
+	/* this is possibly a gate */
+	.name = "ccp2",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_CCP2CTL,
+	.div_reg = CM_CCP2DIV,
+	.int_bits = 1,
+	.frac_bits = 0,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_dft_data = {
+	.name = "dft",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_DFTCTL,
+	.div_reg = CM_DFTDIV,
+	.int_bits = 5,
+	.frac_bits = 0,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_dpi_data = {
+	.name = "dpi",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_DPICTL,
+	.div_reg = CM_DPIDIV,
+	.int_bits = 4,
+	.frac_bits = 8,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_dsi0e_data = {
+	.name = "dsi0e",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_DSI0ECTL,
+	.div_reg = CM_DSI0EDIV,
+	.int_bits = 4,
+	.frac_bits = 8,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_dsi0p_data = {
+	/* this is possibly a gate */
+	.name = "dsi0p",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_DSI0PCTL,
+	.div_reg = CM_DSI0PDIV,
+	.int_bits = 1,
+	.frac_bits = 0,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_dsi1e_data = {
+	.name = "dsi1e",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_DSI1ECTL,
+	.div_reg = CM_DSI1EDIV,
+	.int_bits = 4,
+	.frac_bits = 8,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_dsi1p_data = {
+	/* this is possibly a gate */
+	.name = "dsi1p",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_DSI1PCTL,
+	.div_reg = CM_DSI1PDIV,
+	.int_bits = 1,
+	.frac_bits = 0,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_gnric_data = {
+	.name = "gnric",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_GNRICCTL,
+	.div_reg = CM_GNRICDIV,
+	.int_bits = 12,
+	.frac_bits = 12,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_gp0_data = {
+	.name = "gp0",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_GP0CTL,
+	.div_reg = CM_GP0DIV,
+	.int_bits = 12,
+	.frac_bits = 12,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_gp1_data = {
+	.name = "gp1",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_GP1CTL,
+	.div_reg = CM_GP1DIV,
+	.int_bits = 12,
+	.frac_bits = 12,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_gp2_data = {
+	.name = "gp2",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_GP2CTL,
+	.div_reg = CM_GP2DIV,
+	.int_bits = 12,
+	.frac_bits = 12,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_peria_data = {
+	.name = "peria",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_PERIACTL,
+	.div_reg = CM_PERIADIV,
+	.int_bits = 12,
+	.frac_bits = 12,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_pulse_data = {
+	.name = "pulse",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_PULSECTL,
+	.div_reg = CM_PULSEDIV,
+	.int_bits = 12,
+	.frac_bits = 0,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_slim_data = {
+	.name = "slim",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_SLIMCTL,
+	.div_reg = CM_SLIMDIV,
+	.int_bits = 12,
+	.frac_bits = 12,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_smi_data = {
+	.name = "smi",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_SMICTL,
+	.div_reg = CM_SMIDIV,
+	.int_bits = 4,
+	.frac_bits = 8,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_td0_data = {
+	.name = "td0",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_TD0CTL,
+	.div_reg = CM_TD0DIV,
+	.int_bits = 12,
+	.frac_bits = 12,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_td1_data = {
+	.name = "td1",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_TD1CTL,
+	.div_reg = CM_TD1DIV,
+	.int_bits = 12,
+	.frac_bits = 12,
+};
+
+static const struct bcm2835_clock_data bcm2835_clock_tec_data = {
+	.name = "tec",
+	.num_mux_parents = ARRAY_SIZE(bcm2835_clock_per_parents),
+	.parents = bcm2835_clock_per_parents,
+	.ctl_reg = CM_TECCTL,
+	.div_reg = CM_TECDIV,
+	.int_bits = 6,
+	.frac_bits = 0,
+};
+
 struct bcm2835_gate_data {
 	const char *name;
 	const char *parent;
@@ -836,16 +1062,16 @@ struct bcm2835_gate_data {
 	u32 ctl_reg;
 };
 
-/*
- * CM_PERIICTL (and CM_PERIACTL, CM_SYSCTL and CM_VPUCTL if
- * you have the debug bit set in the power manager, which we
- * don't bother exposing) are individual gates off of the
- * non-stop vpu clock.
- */
 static const struct bcm2835_gate_data bcm2835_clock_peri_image_data = {
 	.name = "peri_image",
 	.parent = "vpu",
 	.ctl_reg = CM_PERIICTL,
+};
+
+static const struct bcm2835_gate_data bcm2835_clock_sys_data = {
+	.name = "sys",
+	.parent = "vpu",
+	.ctl_reg = CM_SYSCTL,
 };
 
 struct bcm2835_pll {
@@ -1591,9 +1817,31 @@ static const struct bcm2835_clk_desc clk_desc_array[] = {
 	[BCM2835_CLOCK_EMMC]	= REGISTER_CLK(&bcm2835_clock_emmc_data),
 	[BCM2835_CLOCK_PWM]	= REGISTER_CLK(&bcm2835_clock_pwm_data),
 	[BCM2835_CLOCK_PCM]	= REGISTER_CLK(&bcm2835_clock_pcm_data),
+	[BCM2835_CLOCK_AVEO]	= REGISTER_CLK(&bcm2835_clock_aveo_data),
+	[BCM2835_CLOCK_CAM0]	= REGISTER_CLK(&bcm2835_clock_cam0_data),
+	[BCM2835_CLOCK_CAM1]	= REGISTER_CLK(&bcm2835_clock_cam1_data),
+	[BCM2835_CLOCK_CCP2]	= REGISTER_CLK(&bcm2835_clock_ccp2_data),
+	[BCM2835_CLOCK_DFT]	= REGISTER_CLK(&bcm2835_clock_dft_data),
+	[BCM2835_CLOCK_DPI]	= REGISTER_CLK(&bcm2835_clock_dpi_data),
+	[BCM2835_CLOCK_DSI0E]	= REGISTER_CLK(&bcm2835_clock_dsi0e_data),
+	[BCM2835_CLOCK_DSI0P]	= REGISTER_CLK(&bcm2835_clock_dsi0p_data),
+	[BCM2835_CLOCK_DSI1E]	= REGISTER_CLK(&bcm2835_clock_dsi1e_data),
+	[BCM2835_CLOCK_DSI1P]	= REGISTER_CLK(&bcm2835_clock_dsi1p_data),
+	[BCM2835_CLOCK_GNRIC]	= REGISTER_CLK(&bcm2835_clock_gnric_data),
+	[BCM2835_CLOCK_GP0]	= REGISTER_CLK(&bcm2835_clock_gp0_data),
+	[BCM2835_CLOCK_GP1]	= REGISTER_CLK(&bcm2835_clock_gp1_data),
+	[BCM2835_CLOCK_GP2]	= REGISTER_CLK(&bcm2835_clock_gp2_data),
+	[BCM2835_CLOCK_PERIA]	= REGISTER_CLK(&bcm2835_clock_peria_data),
+	[BCM2835_CLOCK_PULSE]	= REGISTER_CLK(&bcm2835_clock_pulse_data),
+	[BCM2835_CLOCK_SLIM]	= REGISTER_CLK(&bcm2835_clock_slim_data),
+	[BCM2835_CLOCK_SMI]	= REGISTER_CLK(&bcm2835_clock_smi_data),
+	[BCM2835_CLOCK_TD0]	= REGISTER_CLK(&bcm2835_clock_td0_data),
+	[BCM2835_CLOCK_TD1]	= REGISTER_CLK(&bcm2835_clock_td1_data),
+	[BCM2835_CLOCK_TEC]	= REGISTER_CLK(&bcm2835_clock_tec_data),
 	/* the gates */
 	[BCM2835_CLOCK_PERI_IMAGE] = REGISTER_GATE(
 		&bcm2835_clock_peri_image_data),
+	[BCM2835_CLOCK_SYS]	= REGISTER_GATE(&bcm2835_clock_sys_data),
 };
 
 static int bcm2835_clk_probe(struct platform_device *pdev)
