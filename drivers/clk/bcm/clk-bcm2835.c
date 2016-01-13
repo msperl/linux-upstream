@@ -1182,9 +1182,9 @@ static u32 bcm2835_clock_choose_div(struct clk_hw *hw,
 	/* divider must be >= 2 */
 	div = max_t(u32, div, (2 << CM_DIV_FRAC_BITS));
 
-	/* clamp to max divider allowed */
+	/* clamp to max divider allowed - max is integer divider */
 	div = min_t(u32, div, GENMASK(data->int_bits + CM_DIV_FRAC_BITS - 1,
-				      CM_DIV_FRAC_BITS - data->frac_bits));
+				      CM_DIV_FRAC_BITS));
 
 	return div;
 }
