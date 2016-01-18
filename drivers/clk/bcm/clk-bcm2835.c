@@ -303,10 +303,10 @@
 #define BCM2835_MASH_MAX_FREQ	25000000u
 
 enum bcm2835_clock_mash_type {
-	MASH_NONE = 0,
-	MASH_FRAC = 1,
-	MASH_2ND_ORDER = 2,
-	MASH_3RD_ORDER = 3
+	MASH_NONE = BCM2835_MASH_NONE,
+	MASH_FRAC = BCM2835_MASH_FRAC,
+	MASH_ORDER_2 = BCM2835_MASH_ORDER_2,
+	MASH_ORDER_3 = BCM2835_MASH_ORDER_3
 };
 
 /*
@@ -713,6 +713,7 @@ struct bcm2835_clock_data {
 	u32 frac_bits;
 	/* the mash value to use - see CM_MASH */
 	enum bcm2835_clock_mash_type mash;
+	bool mash_forced;
 
 	bool is_vpu_clock;
 };
@@ -1508,7 +1509,7 @@ static divmash bcm2835_clock_choose_div(struct clk_hw *hw,
 
 	/* select mash mode */
 	if (data->frac_bits && divf)
-		mash = data->mash ? data->mash : MASH_FRAC;
+		mash = data->mash_forced ? data->mash : MASH_FRAC;
 
 	/*
 	 * handle possible limits for different mash levels with fall-tru
@@ -1517,17 +1518,17 @@ static divmash bcm2835_clock_choose_div(struct clk_hw *hw,
 	 *   http://elinux.org/BCM2835_datasheet_errata#p105_table
 	 */
 	switch (mash) {
-	case MASH_3RD_ORDER:
+	case MASH_ORDER_3:
 		if ((divi >= divi_min + 3) &&
 		    (divi + 4 <= divi_max) &&
 		    (parent_rate / (divi - 3) <= BCM2835_MASH_MAX_FREQ))
-			return divmash_calc(MASH_3RD_ORDER, div);
+			return divmash_calc(MASH_ORDER_3, div);
 		/* fall tru if not in bounds */
-	case MASH_2ND_ORDER:
+	case MASH_ORDER_2:
 		if ((divi >= divi_min + 1) &&
 		    (divi + 2 <= divi_max) &&
 		    (parent_rate / (divi - 1) <= BCM2835_MASH_MAX_FREQ))
-			return divmash_calc(MASH_2ND_ORDER, div);
+			return divmash_calc(MASH_ORDER_2, div);
 		/* fall tru if not in bounds */
 	case MASH_FRAC:
 		if ((divi >= divi_min) &&
@@ -1994,6 +1995,8 @@ static const struct bcm2835_clock_data *bcm2835_register_clock_of(
 	struct device *dev = cprman->dev;
 	struct device_node *nc;
 	struct bcm2835_clock_data *data;
+	int err;
+	u32 value;
 
 	/* find the corresponding dt-node */
 	nc = bcm2835_find_dt_node(cprman, id);
@@ -2008,6 +2011,24 @@ static const struct bcm2835_clock_data *bcm2835_register_clock_of(
 
 	/* apply overrides */
 	bcm2835_register_clock_of_parents(cprman, data, nc);
+
+	/* check for mash */
+	err = of_property_read_u32(nc, "brcm,mash-max-order", &value);
+	if (!err) {
+		switch (value) {
+                case MASH_NONE:
+                case MASH_FRAC:
+                case MASH_ORDER_2:
+                case MASH_ORDER_3:
+                        data->mash = value;
+			data->mash_forced = 1;
+                        break;
+                default:
+                        dev_err(dev, "clock %s: undefined mash type: %d\n",
+                                data->name, value);
+                        break;
+                }
+	}
 
 	/* and return the result */
 	return data;
