@@ -711,6 +711,8 @@ struct bcm2835_clock_data {
 	u32 int_bits;
 	/* Number of fractional bits in the divider */
 	u32 frac_bits;
+	/* the minimum divider to allow when fractional */
+	u32 min_frac_div;
 	/* the mash value to use - see CM_MASH */
 	enum bcm2835_clock_mash_type mash;
 	bool mash_forced;
@@ -1709,13 +1711,21 @@ static int bcm2835_clock_determine_closest_rate(struct clk_hw *hw,
 						struct bcm2835_rates *rates,
 						size_t rate_cnt)
 {
+	struct bcm2835_clock *clock = bcm2835_clock_from_hw(hw);
+	const struct bcm2835_clock_data *data = clock->data;
 	struct bcm2835_rates *best = NULL;
 	size_t i;
 
 	/* find best matching */
 	for (i = 0; i < rate_cnt; i++) {
+		/* do not look at anything above the requested rate */
 		if (rates[i].rate > req->rate)
 			continue;
+		/* if we have a divider that is not "safe", then ignore */
+		if (divmash_get_divf(rates[i].dmash) &&
+		    (rates[i].div < data->min_frac_div))
+			continue;
+		/* if we are the first */
 		if (!best) {
 			best = &rates[i];
 			continue;
@@ -2095,6 +2105,10 @@ static const struct bcm2835_clock_data *bcm2835_register_clock_of(
                         break;
                 }
 	}
+	/* add support for min fractional divider */
+	err = of_property_read_u32(nc, "brcm,min-fract-div", &value);
+	if (!err)
+		data->min_frac_div = value << CM_DIV_FRAC_BITS;
 
 	/* and return the result */
 	return data;
