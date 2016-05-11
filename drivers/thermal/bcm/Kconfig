@@ -1,0 +1,4 @@
+config BCM2835_THERMAL
+       tristate "Thermal sensors on bcm2835 SoC"
+       help
+         Support for thermal sensors on Broadcom bcm2835 SoCs.
