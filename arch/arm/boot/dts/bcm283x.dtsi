@@ -237,6 +237,12 @@
 			reg = <0x7e980000 0x10000>;
 			interrupts = <1 9>;
 		};
+
+		memory-conroller@7ee00000 {
+			compatible = "brcm,bcm2835-sdram";
+			reg = <0x7ee00000 0x18c>;
+			clocks = <&clocks BCM2835_CLOCK_SDRAM>;
+		};
 	};
 
 	clocks {
