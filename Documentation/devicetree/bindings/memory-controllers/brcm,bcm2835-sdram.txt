@@ -1,0 +1,16 @@
+Binding for SDRAM driver for BCM2835 SoCs.
+
+Required parameters:
+-------------------
+
+compatible : 	should be: "brcm,bcm2835-sdram"
+reg :		Address range of the SD register-set.
+clocks : 	Phandle of the clock used by the sdram.
+
+Example:
+
+memory-conroller@7ee00000 {
+	compatible = "brcm,bcm2835-sdram";
+	reg = <0x7ee00000 0x18c>;
+	clocks = <&clocks BCM2835_CLOCK_SDRAM>;
+};
