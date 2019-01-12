@@ -67,6 +67,9 @@ static int mcp25xxfd_can_ist_handle_serrif_txmab(struct spi_device *spi)
 	net->stats.tx_errors++;
 	cpriv->stats.int_serr_tx_count++;
 
+	/* data7 contains custom mcp25xxfd error flags */
+	cpriv->error_frame.data[7] |= CAN_ERR_DATA7_MCP25XXFD_SERR_TX;
+
 	/* and switch back into the correct mode */
 	return mcp25xxfd_can_switch_mode_nowait(spi, &cpriv->regs.con,
 						(net->mtu == CAN_MTU) ?
@@ -83,6 +86,9 @@ static int mcp25xxfd_can_ist_handle_serrif_rxmab(struct spi_device *spi)
 	net->stats.rx_dropped++;
 	net->stats.rx_errors++;
 	cpriv->stats.int_serr_rx_count++;
+
+	/* data7 contains custom mcp25xxfd error flags */
+	cpriv->error_frame.data[7] |= CAN_ERR_DATA7_MCP25XXFD_SERR_RX;
 
 	return 0;
 }
@@ -318,6 +324,8 @@ static int mcp25xxfd_can_int_handle_eccif(struct spi_device *spi)
 	/* and prepare ERROR FRAME */
 	cpriv->error_frame.id |= CAN_ERR_CRTL;
 	cpriv->error_frame.data[1] |= CAN_ERR_CRTL_UNSPEC;
+	/* data7 contains custom mcp25xxfd error flags */
+	cpriv->error_frame.data[7] |= CAN_ERR_DATA7_MCP25XXFD_ECC;
 
 	/* delegate to interrupt cleaning */
 	return mcp25xxfd_clear_ecc_interrupts(spi);
