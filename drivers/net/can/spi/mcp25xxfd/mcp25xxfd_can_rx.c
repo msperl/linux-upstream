@@ -57,7 +57,7 @@ void mcp25xxfd_can_rx_fifo_debugfs(struct net_device *net)
 			   &cpriv->stats.rx_reads_prefetch_predicted);
 
 	/* present the fifos */
-	for (i = 0; i < RX_BULK_READ_STATS_BINS - 2; i++) {
+	for (i = 0; i < RX_BULK_READ_STATS_BINS - 1; i++) {
 		snprintf(name, sizeof(name),
 			 "rx_bulk_reads_%i", i + 1);
 		debugfs_create_u64(name, 0444, dir,
