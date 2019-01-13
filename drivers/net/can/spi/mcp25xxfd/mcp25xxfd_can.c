@@ -481,6 +481,7 @@ static void mcp25xxfd_can_debugfs_add(struct spi_device *spi)
 	debugfs_create_u64(name,  0444, cstats, &cpriv->stats.var)
 	DEBUGFS_CREATE("int_calls",		 irq_calls);
 	DEBUGFS_CREATE("int_loops",		 irq_loops);
+	DEBUGFS_CREATE("int_thread_rescheduled", irq_thread_rescheduled);
 	DEBUGFS_CREATE("int_system_error",	 int_serr_count);
 	DEBUGFS_CREATE("int_system_error_tx",	 int_serr_tx_count);
 	DEBUGFS_CREATE("int_system_error_rx",	 int_serr_rx_count);

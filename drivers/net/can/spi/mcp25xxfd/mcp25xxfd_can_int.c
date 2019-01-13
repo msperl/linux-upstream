@@ -13,10 +13,17 @@
 #include <linux/can/dev.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/net.h>
 #include <linux/netdevice.h>
+#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
+
+unsigned int reschedule_int_thread_after = 4;
+module_param(reschedule_int_thread_after, uint, 0664);
+MODULE_PARM_DESC(reschedule_int_thread_after,
+		 "Reschedule the interrupt thread after this many loops\n");
 
 static void mcp25xxfd_can_error_skb(struct spi_device *spi)
 {
@@ -695,13 +702,14 @@ irqreturn_t mcp25xxfd_can_int(int irq, void *dev_id)
 	struct spi_device *spi = priv->spi;
 	struct net_device *net = priv->net;
 	struct mcp25xxfd_can_priv *cpriv = netdev_priv(net);
+	int loops;
 	int ret;
 
 	/* count interrupt calls */
 	cpriv->stats.irq_calls++;
 
-	/* as long as we should be running */
-	while (1) {
+	/* loop forever incrementing counter */
+	for (loops = 0; true; loops++) {
 		/* count irq loops */
 		cpriv->stats.irq_loops++;
 
@@ -724,6 +732,21 @@ irqreturn_t mcp25xxfd_can_int(int irq, void *dev_id)
 		ret = mcp25xxfd_can_int_handle_status(spi);
 		if (ret)
 			return ret;
+
+		/* and allow scheduling of other threads after every loops
+		 * rational here is that if we run 4 rounds without exiting
+		 * then we are probaly in a CAN BUS overload and need to
+		 * reschedule to avoid that polling spi IO is monopolizing
+		 * the CPU.
+		 * Especially on a single core system this should allow
+		 * better performance for the overall system and trigger
+		 * less sleeps during spi transfers and thus decrease
+		 * the likleyhood of a SERR happening...
+		 */
+		if (loops % reschedule_int_thread_after == 0) {
+			cpriv->stats.irq_thread_rescheduled++;
+			cond_resched();
+		}
 	}
 
 	return IRQ_HANDLED;

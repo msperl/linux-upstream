@@ -619,6 +619,7 @@ struct mcp25xxfd_can_priv {
 	struct {
 		u64 irq_calls;
 		u64 irq_loops;
+		u64 irq_thread_rescheduled;
 
 		u64 int_serr_count;
 		u64 int_serr_rx_count;
