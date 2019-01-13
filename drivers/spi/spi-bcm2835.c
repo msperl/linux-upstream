@@ -73,14 +73,20 @@
 
 #define BCM2835_SPI_FIFO_SIZE		64
 #define BCM2835_SPI_FIFO_SIZE_3_4	48
-#define BCM2835_SPI_POLLING_LIMIT_US	30
 #define BCM2835_SPI_POLLING_JIFFIES	2
-#define BCM2835_SPI_DMA_MIN_LENGTH	96
 #define BCM2835_SPI_MODE_BITS	(SPI_CPOL | SPI_CPHA | SPI_CS_HIGH \
 				| SPI_NO_CS | SPI_3WIRE)
 
 #define DRV_NAME	"spi-bcm2835"
 
+unsigned int polling_limit_us = 30;
+module_param(polling_limit_us, uint, 0664);
+MODULE_PARM_DESC(polling_limit_us,
+		 "transfer time in us that we are allowed to use polling IO  insted of running in interrupt mode\n");
+unsigned int dma_min_length = 96;
+module_param(dma_min_length, uint, 0664);
+MODULE_PARM_DESC(dma_min_length,
+		 "number of bytes of transfer when DMA transfer should be preferred\n");
 /**
  * struct bcm2835_spi - BCM2835 SPI controller
  * @regs: base address of register map
@@ -627,7 +633,7 @@ static bool bcm2835_spi_can_dma(struct spi_master *master,
 				struct spi_transfer *tfr)
 {
 	/* we start DMA efforts only on bigger transfers */
-	if (tfr->len < BCM2835_SPI_DMA_MIN_LENGTH)
+	if (tfr->len < dma_min_length)
 		return false;
 
 	/* BCM2835_SPI_DLEN has defined a max transfer size as
@@ -826,7 +832,7 @@ static int bcm2835_spi_transfer_one(struct spi_master *master,
 	do_div(xfer_time_us, spi_used_hz);
 
 	/* for short requests run polling*/
-	if (xfer_time_us <= BCM2835_SPI_POLLING_LIMIT_US)
+	if (xfer_time_us <= polling_limit_us)
 		return bcm2835_spi_transfer_one_poll(master, spi, tfr,
 						     cs, xfer_time_us);
 
