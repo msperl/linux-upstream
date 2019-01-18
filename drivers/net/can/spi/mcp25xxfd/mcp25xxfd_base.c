@@ -151,7 +151,7 @@ static int mcp25xxfd_write_then_read(struct spi_device *spi,
 
 	/* use allocated buffer when too big or already in use */
 	if ((tx_len + rx_len > MCP25XXFD_BUFFER_TXRX_SIZE) ||
-	    !spin_trylock(&priv->spi_rxtx_lock)) {
+	    !mutex_trylock(&priv->spi_rxtx_lock)) {
 		spi_tx = kzalloc(2 * (tx_len + rx_len), GFP_KERNEL);
 		spi_rx = spi_tx + tx_len + rx_len;
 	} else {
@@ -196,7 +196,7 @@ static int mcp25xxfd_write_then_read(struct spi_device *spi,
 
 out:
 	if (spi_tx == priv->spi_tx)
-		spin_unlock(&priv->spi_rxtx_lock);
+		mutex_unlock(&priv->spi_rxtx_lock);
 	else
 		kfree(spi_tx);
 
@@ -220,7 +220,7 @@ static int mcp25xxfd_write_then_write(struct spi_device *spi,
 
 	/* use allocated buffer when too big or already in use */
 	if ((tx_len + tx2_len > MCP25XXFD_BUFFER_TXRX_SIZE) ||
-	    !spin_trylock(&priv->spi_rxtx_lock)) {
+	    !mutex_trylock(&priv->spi_rxtx_lock)) {
 		xfer.tx_buf = kzalloc(tx_len + tx2_len, GFP_KERNEL);
 	} else {
 		xfer.tx_buf = priv->spi_tx;
@@ -235,7 +235,7 @@ static int mcp25xxfd_write_then_write(struct spi_device *spi,
 
 	/* release lock */
 	if (xfer.tx_buf == priv->spi_tx)
-		spin_unlock(&priv->spi_rxtx_lock);
+		mutex_unlock(&priv->spi_rxtx_lock);
 	else
 		kfree(xfer.tx_buf);
 
@@ -1000,7 +1000,7 @@ static int mcp25xxfd_probe(struct spi_device *spi)
 	priv->clk = clk;
 
 	mutex_init(&priv->clk_user_lock);
-	spin_lock_init(&priv->spi_rxtx_lock);
+	mutex_init(&priv->spi_rxtx_lock);
 
 	/* enable the clock and mark as enabled */
 	ret = clk_prepare_enable(clk);
