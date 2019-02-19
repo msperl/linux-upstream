@@ -7,6 +7,16 @@
    #clock-cells = <0>;
    clock-frequency  = <4000000>;
   };
+  can2_osc: can2_osc {
+   compatible = "fixed-clock";
+   #clock-cells = <0>;
+   clock-frequency  = <40000000>;
+  };
+  can3_osc: can3_osc {
+   compatible = "fixed-clock";
+   #clock-cells = <0>;
+   clock-frequency  = <40000000>;
+  };
  };
 };
 
@@ -15,6 +25,25 @@
    brcm,pins = <16>;
    brcm,function = <0>; /* input */
   };
+  can2_pins: can2_pins {
+    brcm,pins = <22>;
+    brcm,function = <0>; /* input */
+  };
+  can3_pins: can3_pins {
+    brcm,pins = <23>;
+    brcm,function = <0>; /* input */
+  };
+
+  spi1_gpio19: spi1_gpio19 {
+    brcm,pins = <19 20 21>;
+    brcm,function = <BCM2835_FSEL_ALT4>;
+  };
+
+  spi1_gpio17: spi1_gpio17 {
+    brcm,pins = <17 18>;
+    brcm,function = <BCM2835_FSEL_GPIO_OUT>;
+  };
+
 };
 
 &spi {
@@ -34,4 +63,35 @@ mcp2517fdcan0: can@0 {
   interrupt-parent = <&gpio>;
   interrupts = <16 0x8>;
  };
+};
+
+&spi1 {
+  status = "okay";
+  pinctrl-names = "default";
+  pinctrl-0 = <&spi1_gpio19>, <&spi1_gpio17>;
+  cs-gpios = <&gpio 18 BCM2835_FSEL_GPIO_OUT>,
+             <&gpio 17 BCM2835_FSEL_GPIO_OUT>;
+
+  mcp2517fdcan2: can@0 {
+    compatible = "microchip,mcp2517fd";
+    pinctrl-names = "default";
+    pinctrl-0 = <&can2_pins>;
+    reg = <0>;
+    clocks = <&can2_osc>;
+    spi-max-frequency = <4000000>;
+    interrupt-parent = <&gpio>;
+    interrupts = <22 0x8>;
+  };
+
+  mcp2517fdcan3: can@1 {
+    compatible = "microchip,mcp2517fd";
+    pinctrl-names = "default";
+    pinctrl-0 = <&can3_pins>;
+    reg = <1>;
+    clocks = <&can3_osc>;
+    spi-max-frequency = <4000000>;
+    interrupt-parent = <&gpio>;
+    interrupts = <23 0x8>;
+  };
+
 };
