@@ -7,6 +7,11 @@
    #clock-cells = <0>;
    clock-frequency  = <4000000>;
   };
+  can2_osc: can2_osc {
+   compatible = "fixed-clock";
+   #clock-cells = <0>;
+   clock-frequency  = <40000000>;
+  };
  };
 };
 
@@ -14,6 +19,10 @@
   can0_pins: can0_pins {
    brcm,pins = <16>;
    brcm,function = <0>; /* input */
+  };
+  can2_pins: can2_pins {
+    brcm,pins = <22>;
+    brcm,function = <0>; /* input */
   };
 };
 
@@ -33,5 +42,22 @@ mcp2517fdcan0: can@0 {
   spi-max-frequency = <12500000>;
   interrupt-parent = <&gpio>;
   interrupts = <16 0x8>;
+ };
+};
+
+&spi1 {
+ status = "okay";
+ pinctrl-names = "default";
+ pinctrl-0 = <&spi1_gpio16>;
+
+mcp2517fdcan2: can@0 {
+  compatible = "microchip,mcp2517fd";
+  pinctrl-names = "default";
+  pinctrl-0 = <&can2_pins>;
+  reg = <0>;
+  clocks = <&can2_osc>;
+  spi-max-frequency = <4000000>;
+  interrupt-parent = <&gpio>;
+  interrupts = <22 0x8>;
  };
 };
