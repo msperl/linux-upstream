@@ -627,8 +627,14 @@ irqreturn_t mcp25xxfd_can_int(int irq, void *dev_id)
 					      MCP25XXFD_CAN_INT,
 					      &cpriv->status.intf,
 					      sizeof(cpriv->status));
-		if (ret)
-			return ret;
+		switch (ret) {
+		case 0: /* no errors, so process */
+			break;
+		case -EILSEQ: /* a crc error, so run the loop again */
+			continue;
+		default: /* all other error cases */
+			goto fail;
+		}
 
 		/* only act if the IE mask configured has active IF bits
 		 * otherwise the Interrupt line should be deasserted already
@@ -638,10 +644,15 @@ irqreturn_t mcp25xxfd_can_int(int irq, void *dev_id)
 		       cpriv->status.intf) == 0)
 			break;
 
-		/* handle the status */
+		/* handle the interrupts for real */
 		ret = mcp25xxfd_can_int_handle_status(cpriv);
-		if (ret)
-			return ret;
+		switch (ret) {
+		case 0: /* no errors, so process */
+		case -EILSEQ: /* a crc error, so run the loop again */
+			break;
+		default: /* all other error cases */
+			goto fail;
+		}
 
 		/* allow voluntarily rescheduling every so often to avoid
 		 * long CS lows at the end of a transfer on low power CPUs
@@ -655,6 +666,16 @@ irqreturn_t mcp25xxfd_can_int(int irq, void *dev_id)
 	}
 
 	return IRQ_HANDLED;
+
+fail:
+	netdev_err(cpriv->can.dev,
+		   "experienced unexpected error %i in interrupt handler\n",
+		   ret);
+	/* disabling interrupts here with mcp25xxfd_int_enable(..., false)
+	 * has the side-effect that the module can not longer get removed
+	 */
+
+	return IRQ_NONE;
 }
 
 int mcp25xxfd_can_int_clear(struct mcp25xxfd_priv *priv)
