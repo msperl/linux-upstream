@@ -211,6 +211,32 @@ static u16 _mcp25xxfd_cmd_compute_crc(u8 *cmd, u8 *data, int n)
 	return crc;
 }
 
+static int _mcp25xxfd_cmd_check_flip(struct spi_device *spi, u8 *cmd,
+				     u8 *data, int n, int off, u16 crcr)
+{
+	u16 crcc;
+
+	/* do a range check */
+	if ((off < 0) || (off > n + 3))
+		return false;
+
+	/* data bit 7 may flip, so simulate the flip */
+	data[off] ^= 0x80;
+
+	/* compute crc for modified data */
+	crcc = _mcp25xxfd_cmd_compute_crc(cmd, data, n);
+
+	/* if it did not match, then flip it back */
+	if (crcc != crcr)
+		data[off] ^= 0x80;
+	else
+		dev_warn_ratelimited(&spi->dev,
+				     "single-bit CRC bitflip detected and corrected\n");
+
+	/* and return the verdict */
+	return (crcc == crcr);
+}
+
 static int _mcp25xxfd_cmd_readn_crc(struct spi_device *spi, u32 reg,
 				    void *data, int n)
 {
@@ -243,6 +269,18 @@ static int _mcp25xxfd_cmd_readn_crc(struct spi_device *spi, u32 reg,
 		return 0;
 
 	/* here possibly handle crc variants with a single bit7 flips */
+	if (_mcp25xxfd_cmd_check_flip(spi, cmd, data, n, crcr,
+				      MCP25XXFD_CAN_TXREQ - reg ))
+		return 0;
+	if (_mcp25xxfd_cmd_check_flip(spi, cmd, data, n, crcr,
+				      MCP25XXFD_CAN_TXREQ - reg + 1))
+		return 0;
+	if (_mcp25xxfd_cmd_check_flip(spi, cmd, data, n, crcr,
+				      MCP25XXFD_CAN_TXREQ - reg + 2))
+		return 0;
+	if (_mcp25xxfd_cmd_check_flip(spi, cmd, data, n, crcr,
+				      MCP25XXFD_CAN_TXREQ - reg + 3))
+		return 0;
 
 	/* return with error and rate limited */
 	dev_err_ratelimited(&spi->dev,
