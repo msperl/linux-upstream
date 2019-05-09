@@ -219,7 +219,7 @@ static int mcp25xxfd_can_int_handle_modif(struct mcp25xxfd_can_priv *cpriv)
 
 	/* get the current mode */
 	ret = mcp25xxfd_can_get_mode(cpriv->priv, &mode);
-	if (ret)
+	if (ret < 0)
 		return ret;
 	mode = ret;
 
