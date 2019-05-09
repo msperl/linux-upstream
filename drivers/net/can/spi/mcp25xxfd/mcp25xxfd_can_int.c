@@ -219,9 +219,10 @@ static int mcp25xxfd_can_int_handle_modif(struct mcp25xxfd_can_priv *cpriv)
 
 	/* get the current mode */
 	ret = mcp25xxfd_can_get_mode(cpriv->priv, &mode);
-	if (ret < 0)
+	if (ret)
 		return ret;
-	mode = ret;
+	mode = (mode & MCP25XXFD_CAN_CON_OPMOD_MASK) >>
+		MCP25XXFD_CAN_CON_OPMOD_SHIFT;
 
 	/* switches to the same mode as before are ignored
 	 * - this typically happens if the driver is shortly

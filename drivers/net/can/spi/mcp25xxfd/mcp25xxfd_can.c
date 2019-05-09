@@ -203,8 +203,7 @@ int mcp25xxfd_can_get_mode(struct mcp25xxfd_priv *priv, u32 *reg)
 	if (ret)
 		return ret;
 
-	return (*reg & MCP25XXFD_CAN_CON_OPMOD_MASK) >>
-		MCP25XXFD_CAN_CON_OPMOD_SHIFT;
+	return 0;
 }
 
 int mcp25xxfd_can_switch_mode_no_wait(struct mcp25xxfd_priv *priv,
@@ -221,7 +220,7 @@ int mcp25xxfd_can_switch_mode_no_wait(struct mcp25xxfd_priv *priv,
 	if (reg) {
 		if (!*reg) {
 			ret = mcp25xxfd_can_get_mode(priv, reg);
-			if (ret < 0)
+			if (ret)
 				return ret;
 		}
 	} else {
@@ -271,10 +270,11 @@ int mcp25xxfd_can_switch_mode(struct mcp25xxfd_priv *priv, u32 *reg, int mode)
 	for (i = 0; i < 256; i++) {
 		/* get the mode */
 		ret = mcp25xxfd_can_get_mode(priv, reg);
-		if (ret < 0)
+		if (ret)
 			return ret;
 		/* check that we have reached our mode */
-		if (ret == mode)
+		if ((((*reg) & MCP25XXFD_CAN_CON_OPMOD_MASK) >>
+		  MCP25XXFD_CAN_CON_OPMOD_SHIFT) == mode)
 			return 0;
 	}
 
@@ -334,9 +334,12 @@ int mcp25xxfd_can_probe(struct mcp25xxfd_priv *priv)
 	}
 
 	/* try to get the current mode */
-	mode = mcp25xxfd_can_get_mode(priv, &mode_data);
-	if (mode < 0)
-		return mode;
+	ret = mcp25xxfd_can_get_mode(priv, &mode_data);
+	if (ret)
+		return ret;
+
+	mode = (mode_data & MCP25XXFD_CAN_CON_OPMOD_MASK) >>
+		MCP25XXFD_CAN_CON_OPMOD_SHIFT;
 
 	/* we would expect to be in config mode, as a SPI-reset should
 	 * have moved us into config mode.
